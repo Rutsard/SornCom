@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # Database 1: core_db (PostgreSQL)
+  # Handles Users, Auth, Tracks (POSN / Eng), Lessons, and Progress
+  # ----------------------------------------------------------------------------
+  core_db:
+    image: postgres:16-alpine
+    container_name: judge_core_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CORE_DB_USER:-core_admin}
+      POSTGRES_PASSWORD: ${CORE_DB_PASSWORD:-core_secure_password_9921}
+      POSTGRES_DB: ${CORE_DB_NAME:-core_db}
+    ports:
+      - "${CORE_DB_PORT:-5432}:5432"
+    volumes:
+      - core_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CORE_DB_USER:-core_admin} -d ${CORE_DB_NAME:-core_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - platform_net
+
+  # ----------------------------------------------------------------------------
+  # Database 2: judge_db (PostgreSQL)
+  # Handles Problem Statements, Test Cases, Submissions, and Verdicts (P, -, T, X)
+  # ----------------------------------------------------------------------------
+  judge_db:
+    image: postgres:16-alpine
+    container_name: judge_engine_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${JUDGE_DB_USER:-judge_admin}
+      POSTGRES_PASSWORD: ${JUDGE_DB_PASSWORD:-judge_secure_password_9921}
+      POSTGRES_DB: ${JUDGE_DB_NAME:-judge_db}
+    ports:
+      - "${JUDGE_DB_PORT:-5433}:5432"
+    volumes:
+      - judge_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${JUDGE_DB_USER:-judge_admin} -d ${JUDGE_DB_NAME:-judge_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - platform_net
+
+  # ----------------------------------------------------------------------------
+  # Queue & Cache: redis_store
+  # Handles real-time submission queue, rate limiting, and pub/sub verdicts
+  # ----------------------------------------------------------------------------
+  redis_store:
+    image: redis:7-alpine
+    container_name: judge_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - platform_net
+
+  # ----------------------------------------------------------------------------
+  # Judge0 Internal DB (CE metadata & language definitions)
+  # ----------------------------------------------------------------------------
+  judge0_db:
+    image: postgres:16-alpine
+    container_name: judge0_internal_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0_internal_password
+      POSTGRES_DB: judge0
+    volumes:
+      - judge0_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U judge0 -d judge0"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - platform_net
+
+  # ----------------------------------------------------------------------------
+  # Judge0 Server: Self-hosted code execution API
+  # ----------------------------------------------------------------------------
+  judge0_server:
+    image: judge0/judge0:1.13.1
+    container_name: judge0_api_server
+    restart: unless-stopped
+    ports:
+      - "2358:2358"
+    privileged: true
+    environment:
+      - REDIS_HOST=redis_store
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=judge0_db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0_internal_password
+      - POSTGRES_DB=judge0
+    depends_on:
+      redis_store:
+        condition: service_healthy
+      judge0_db:
+        condition: service_healthy
+    networks:
+      - platform_net
+
+  # ----------------------------------------------------------------------------
+  # Judge0 Worker: Isolated sandboxed execution
+  # ----------------------------------------------------------------------------
+  judge0_worker:
+    image: judge0/judge0:1.13.1
+    container_name: judge0_sandbox_worker
+    restart: unless-stopped
+    command: ["./scripts/workers"]
+    privileged: true
+    environment:
+      - REDIS_HOST=redis_store
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=judge0_db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0_internal_password
+      - POSTGRES_DB=judge0
+    depends_on:
+      judge0_server:
+        condition: service_started
+    networks:
+      - platform_net
+
+volumes:
+  core_db_data:
+    name: judge_core_db_data
+  judge_db_data:
+    name: judge_engine_db_data
+  redis_data:
+    name: judge_redis_data
+  judge0_db_data:
+    name: judge0_internal_db_data
+
+networks:
+  platform_net:
+    name: judge_platform_network
+    driver: bridge

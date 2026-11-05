@@ -1,0 +1,128 @@
+// ==============================================================================
+// Judge Database Schema (judge_db)
+// Responsible for: Problem Statements, Test Cases, Submissions, and Verdicts
+// Configured via JUDGE_DATABASE_URL
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/judge"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("JUDGE_DATABASE_URL")
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum SubmissionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum CaseVerdict {
+  P // Passed
+  W // Wrong Answer (programming.in.th displays as "-")
+  T // Time Limit Exceeded
+  X // Runtime Error / Exception
+  M // Memory Limit Exceeded
+}
+
+model Task {
+  id                   String       @id // e.g. "0001", "ENG01"
+  title                String
+  slug                 String       @unique
+  trackId              String       // "POSN-Camp-1" | "Eng-ComProg"
+  difficulty           Difficulty   @default(EASY)
+  timeLimitMs          Int          @default(1000) // 1.0 second
+  memoryLimitMb        Int          @default(64)   // 64 MB
+  tags                 String[]     // ["Loop", "Array", "Math", "NumPy"]
+  
+  // Problem Details
+  statementMarkdown    String       @db.Text
+  inputFormat          String       @db.Text
+  outputFormat         String       @db.Text
+  sampleInput          String       @db.Text
+  sampleOutput         String       @db.Text
+  constraints          String       @db.Text
+  hints                String?      @db.Text
+
+  // Code Tracing Mode for POSN Paper Exam
+  hasTracingQuiz       Boolean      @default(false)
+  tracingSnippet       String?      @db.Text
+  tracingQuestion      String?      @db.Text
+  tracingExpectedOutput String?     @db.Text
+  tracingExplanation   String?      @db.Text
+
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  testCases            TestCase[]
+  submissions          Submission[]
+
+  @@index([trackId])
+  @@index([difficulty])
+  @@map("tasks")
+}
+
+model TestCase {
+  id             String              @id @default(cuid())
+  taskId         String
+  order          Int                 @default(0)
+  input          String              @db.Text
+  expectedOutput String              @db.Text
+  isSample       Boolean             @default(false)
+  scoreWeight    Int                 @default(10) // Weight out of 100 total
+  
+  task           Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  verdicts       SubmissionVerdict[]
+
+  @@map("test_cases")
+}
+
+model Submission {
+  id              String              @id @default(cuid())
+  taskId          String
+  userId          String              // Logical reference to users in core_db
+  language        String              @default("python3")
+  code            String              @db.Text
+  status          SubmissionStatus    @default(PENDING)
+  verdictString   String              @default("----") // e.g., "PPPP", "PP-PTPPP"
+  score           Int                 @default(0)      // 0 - 100
+  executionTimeMs Int?                // Max execution time across cases
+  memoryUsedKb    Int?                // Max memory across cases
+  errorMessage    String?             @db.Text
+  submittedAt     DateTime            @default(now())
+
+  task            Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  caseVerdicts    SubmissionVerdict[]
+
+  @@index([taskId])
+  @@index([userId])
+  @@map("submissions")
+}
+
+model SubmissionVerdict {
+  id              String      @id @default(cuid())
+  submissionId    String
+  testCaseId      String
+  order           Int         @default(0)
+  verdict         CaseVerdict @default(W)
+  verdictChar     String      @default("-") // "P", "-", "T", "X", "M"
+  executionTimeMs Int         @default(0)
+  memoryUsedKb    Int         @default(0)
+  stdout          String?     @db.Text
+  stderr          String?     @db.Text
+
+  submission      Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  testCase        TestCase    @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@map("submission_verdicts")
+}

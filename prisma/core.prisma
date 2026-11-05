@@ -1,0 +1,125 @@
+// ==============================================================================
+// Core Database Schema (core_db)
+// Responsible for: Users, Authentication, Tracks, Lessons, and Progress
+// Configured via CORE_DATABASE_URL
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/core"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CORE_DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHING_ASSISTANT
+  INSTRUCTOR
+  ADMIN
+}
+
+enum TaskStatus {
+  NOT_ATTEMPTED
+  ATTEMPTED
+  SOLVED
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  username     String         @unique
+  fullName     String
+  passwordHash String
+  role         Role           @default(STUDENT)
+  currentTrack String         @default("POSN-Camp-1") // "POSN-Camp-1" | "Eng-ComProg"
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  
+  progress     UserProgress[]
+  taskProgress TaskProgress[]
+
+  @@map("users")
+}
+
+model Track {
+  id          String   @id // "POSN-Camp-1" or "Eng-ComProg"
+  title       String
+  subtitle    String
+  description String
+  badgeColor  String   // hex or tailwind class
+  iconName    String
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  modules     Module[]
+  progress    UserProgress[]
+
+  @@map("tracks")
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  trackId     String
+  title       String
+  slug        String
+  description String
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  track       Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+
+  @@map("modules")
+}
+
+model Lesson {
+  id        String   @id @default(cuid())
+  moduleId  String
+  title     String
+  slug      String
+  content   String   // Markdown educational guide
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  module    Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@map("lessons")
+}
+
+model UserProgress {
+  id                 String   @id @default(cuid())
+  userId             String
+  trackId            String
+  totalSolvedTasks   Int      @default(0)
+  totalPoints        Int      @default(0)
+  lastActivityAt     DateTime @default(now())
+  
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track              Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trackId])
+  @@map("user_progress")
+}
+
+model TaskProgress {
+  id             String     @id @default(cuid())
+  userId         String
+  taskId         String     // References Task.id in judge_db (logical separation)
+  status         TaskStatus @default(NOT_ATTEMPTED)
+  bestScore      Int        @default(0) // 0 - 100
+  bestVerdict    String?    // e.g. "PPPP" or "PP-P"
+  attemptCount   Int        @default(0)
+  solvedAt       DateTime?
+  lastAttemptAt  DateTime   @default(now())
+
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId])
+  @@map("task_progress")
+}
