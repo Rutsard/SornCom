@@ -95,8 +95,13 @@ npm run prisma:push
 npm run db:seed
 ```
 
-### 3. Start Development Server
+### 3. Start Development Server & Optional Standalone Worker
 ```bash
+# Terminal 1: Next.js Web App
 npm run dev
+
+# Terminal 2 (Optional): Standalone Redis Grading Worker Daemon
+npm run worker
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+Visit `/tasks/0001` to test interactive coding or `/submissions` to view live queue logs.

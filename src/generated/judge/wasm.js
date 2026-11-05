@@ -206,8 +206,8 @@ exports.Difficulty = exports.$Enums.Difficulty = {
 };
 
 exports.SubmissionStatus = exports.$Enums.SubmissionStatus = {
-  PENDING: 'PENDING',
-  RUNNING: 'RUNNING',
+  WAITING: 'WAITING',
+  GRADING: 'GRADING',
   COMPLETED: 'COMPLETED',
   FAILED: 'FAILED'
 };

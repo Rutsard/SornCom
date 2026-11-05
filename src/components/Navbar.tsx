@@ -38,6 +38,14 @@ export function Navbar() {
           </Link>
 
           <Link
+            href="/submissions"
+            className="px-3 py-1.5 text-zinc-300 hover:text-white hover:bg-zinc-800/80 rounded-md transition-colors flex items-center gap-1.5"
+          >
+            <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Submissions</span>
+          </Link>
+
+          <Link
             href="/tasks?track=POSN-Camp-1"
             className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sky-400 hover:bg-sky-950/30 rounded-md transition-colors border border-sky-500/20"
           >

@@ -48,8 +48,8 @@ export type Difficulty = (typeof Difficulty)[keyof typeof Difficulty]
 
 
 export const SubmissionStatus: {
-  PENDING: 'PENDING',
-  RUNNING: 'RUNNING',
+  WAITING: 'WAITING',
+  GRADING: 'GRADING',
   COMPLETED: 'COMPLETED',
   FAILED: 'FAILED'
 };

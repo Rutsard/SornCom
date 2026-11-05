@@ -8,8 +8,7 @@ import React, { useState, useEffect } from "react";
 import Editor from "@monaco-editor/react";
 import { Play, Send, RotateCcw, Terminal, CheckCircle, Zap, Code2, AlertTriangle } from "lucide-react";
 import { usePyodide, PyodideRunResult } from "@/lib/usePyodide";
-import { VerdictDisplay } from "./VerdictDisplay";
-import { SubmissionResult } from "@/lib/judge-engine";
+import { LiveGradingPanel } from "./LiveGradingPanel";
 import { TaskSeed } from "@/lib/seed-data";
 
 interface EditorPaneProps {
@@ -29,7 +28,7 @@ export function EditorPane({ task, externalInput }: EditorPaneProps) {
 
   // Server-side Judge grading
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [verdict, setVerdict] = useState<SubmissionResult | null>(null);
+  const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // When external input is updated (e.g. from sample case click)
@@ -59,19 +58,19 @@ export function EditorPane({ task, externalInput }: EditorPaneProps) {
     }
   };
 
-  // Handle official submit to Auto-Grader
+  // Handle official submit to Auto-Grader (POST /api/submissions -> Redis queue -> Judge Worker)
   const handleSubmitToJudge = async () => {
     setIsSubmitting(true);
     setActiveTab("verdict");
     setSubmitError(null);
 
     try {
-      const res = await fetch("/api/submit", {
+      const res = await fetch("/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           taskId: task.id,
-          code,
+          sourceCode: code,
           userId: "camper-guest",
         }),
       });
@@ -80,7 +79,7 @@ export function EditorPane({ task, externalInput }: EditorPaneProps) {
       if (!data.success) {
         setSubmitError(data.error || "Grading service returned an error.");
       } else {
-        setVerdict(data.data);
+        setActiveSubmissionId(data.submissionId);
       }
     } catch (err) {
       setSubmitError((err as Error).message || "Failed to submit code to judge.");
@@ -259,7 +258,7 @@ export function EditorPane({ task, externalInput }: EditorPaneProps) {
                 <span>{submitError}</span>
               </div>
             )}
-            <VerdictDisplay verdict={verdict} isLoading={isSubmitting} />
+            <LiveGradingPanel submissionId={activeSubmissionId} />
           </div>
         )}
       </div>

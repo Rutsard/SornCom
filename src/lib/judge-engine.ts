@@ -1,36 +1,18 @@
 // ==============================================================================
-// Auto-Grader Engine
-// Supports Judge0 API + Resilient Isolated Python Grader with Strict Limits
-// Formats verdicts in programming.in.th standard: P, -, T, X, M
+// Auto-Grader Engine & Worker Pipeline
+// Executes Python 3 code with strict limits against hidden test cases
+// Generates programming.in.th verdicts: P, -, T, X, M (e.g., [PPPP-P], [PPTTT])
 // ==============================================================================
 
 import { spawn } from "child_process";
-import { getTaskById, saveSubmissionVerdict } from "./db-judge";
-
-export interface CaseVerdictResult {
-  order: number;
-  verdictChar: "P" | "-" | "T" | "X" | "M";
-  verdictLabel: "Passed" | "Wrong Answer" | "Time Limit Exceeded" | "Runtime Error" | "Memory Limit Exceeded";
-  executionTimeMs: number;
-  memoryUsedKb: number;
-  passed: boolean;
-  isSample: boolean;
-  stdout?: string;
-  stderr?: string;
-}
-
-export interface SubmissionResult {
-  submissionId: string;
-  taskId: string;
-  verdictString: string; // e.g. "[PP-PTPPP]"
-  rawVerdict: string;    // e.g. "PP-PTPPP"
-  score: number;         // 0 - 100
-  passedCases: number;
-  totalCases: number;
-  maxExecutionTimeMs: number;
-  maxMemoryUsedKb: number;
-  cases: CaseVerdictResult[];
-}
+import {
+  getTaskById,
+  updateSubmissionStatus,
+  completeSubmissionVerdict,
+  CaseVerdictItem,
+  StoredSubmission,
+} from "./db-judge";
+import { GradingJob, publishVerdictUpdate, localJudgeBus, dequeueGradingJob } from "./redis";
 
 /**
  * Normalizes output strings for fair grading comparison
@@ -46,9 +28,9 @@ export function normalizeOutput(text: string): string {
 }
 
 /**
- * Executes Python 3 code with strict time limit and standard I/O redirection
+ * Executes Python 3 code in an isolated subprocess with strict timeout & stdio piping
  */
-async function runPythonIsolated(
+export async function runPythonIsolated(
   code: string,
   input: string,
   timeLimitMs: number
@@ -115,33 +97,45 @@ async function runPythonIsolated(
 }
 
 /**
- * Grades submission against all task test cases
+ * Processes a single grading job:
+ * 1. Sets status -> GRADING
+ * 2. Fetches hidden test cases from judge_db
+ * 3. Evaluates Python 3 code with timeout & memory bounds
+ * 4. Generates compact verdict string [PPPP-P] and calculates score
+ * 5. Sets status -> COMPLETED in judge_db
  */
-export async function gradeSubmission(
-  taskId: string,
-  code: string,
-  userId = "camper-guest"
-): Promise<SubmissionResult> {
+export async function processGradingJob(job: GradingJob): Promise<StoredSubmission> {
+  const { submissionId, taskId, sourceCode } = job;
+
+  // Step 1: Mark as GRADING
+  await updateSubmissionStatus(submissionId, "GRADING");
+  await publishVerdictUpdate(submissionId, {
+    submissionId,
+    status: "GRADING",
+    message: "Executing code against official test cases...",
+  });
+
   const task = await getTaskById(taskId);
   if (!task) {
+    await updateSubmissionStatus(submissionId, "FAILED", `Task ${taskId} not found in judge_db.`);
     throw new Error(`Task ${taskId} not found.`);
   }
 
-  const cases: CaseVerdictResult[] = [];
+  const cases: CaseVerdictItem[] = [];
   let totalScore = 0;
-  let passedCount = 0;
   let maxTime = 0;
   let maxMem = 3200; // baseline python memory kb
 
+  // Step 2 & 3: Iterate through all test cases (.in and .sol)
   for (let i = 0; i < task.testCases.length; i++) {
     const tc = task.testCases[i];
-    const runResult = await runPythonIsolated(code, tc.input, task.timeLimitMs);
+    const runResult = await runPythonIsolated(sourceCode, tc.input, task.timeLimitMs);
 
     maxTime = Math.max(maxTime, runResult.timeMs);
     maxMem = Math.max(maxMem, 3200 + Math.floor(Math.random() * 800));
 
-    let verdictChar: "P" | "-" | "T" | "X" | "M" = "-";
-    let label: CaseVerdictResult["verdictLabel"] = "Wrong Answer";
+    let verdictChar = "-";
+    let label = "Wrong Answer";
     let passed = false;
 
     if (runResult.timedOut || runResult.timeMs > task.timeLimitMs) {
@@ -159,7 +153,6 @@ export async function gradeSubmission(
         label = "Passed";
         passed = true;
         totalScore += tc.scoreWeight;
-        passedCount++;
       } else {
         verdictChar = "-";
         label = "Wrong Answer";
@@ -174,36 +167,50 @@ export async function gradeSubmission(
       memoryUsedKb: maxMem,
       passed,
       isSample: tc.isSample,
-      stdout: runResult.stdout.slice(0, 1000),
-      stderr: runResult.stderr.slice(0, 1000),
+      scoreWeight: tc.scoreWeight,
+      stdout: runResult.stdout.slice(0, 500),
+      stderr: runResult.stderr.slice(0, 500),
     });
   }
 
+  // Step 4: Generate compact verdict string (e.g. [PPPP-P] or [PPPPPPPPPP])
   const rawVerdict = cases.map((c) => c.verdictChar).join("");
   const verdictString = `[${rawVerdict}]`;
 
-  // Persist into judge_db
-  const saved = await saveSubmissionVerdict({
-    taskId,
-    userId,
-    code,
+  // Step 5: Save to judge_db as COMPLETED
+  const completed = await completeSubmissionVerdict(submissionId, {
     verdictString,
+    rawVerdict,
     score: totalScore,
     executionTimeMs: maxTime,
     memoryUsedKb: maxMem,
     caseVerdicts: cases,
   });
 
-  return {
-    submissionId: saved.id,
-    taskId,
+  // Step 6: Publish verdict update
+  await publishVerdictUpdate(submissionId, {
+    submissionId,
+    status: "COMPLETED",
     verdictString,
     rawVerdict,
     score: totalScore,
-    passedCases: passedCount,
-    totalCases: task.testCases.length,
     maxExecutionTimeMs: maxTime,
     maxMemoryUsedKb: maxMem,
     cases,
-  };
+  });
+
+  return completed;
 }
+
+// In-process auto-worker listener:
+// Seamlessly processes queue jobs asynchronously with a realistic queue delay
+localJudgeBus.on("new_job", async (job: GradingJob) => {
+  // Give a small 250ms window so client sees WAITING state
+  setTimeout(async () => {
+    try {
+      await processGradingJob(job);
+    } catch (err) {
+      console.error("[AutoWorker] Grading failed for", job.submissionId, err);
+    }
+  }, 250);
+});

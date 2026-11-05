@@ -21,8 +21,8 @@ enum Difficulty {
 }
 
 enum SubmissionStatus {
-  PENDING
-  RUNNING
+  WAITING
+  GRADING
   COMPLETED
   FAILED
 }
@@ -93,7 +93,7 @@ model Submission {
   userId          String              // Logical reference to users in core_db
   language        String              @default("python3")
   code            String              @db.Text
-  status          SubmissionStatus    @default(PENDING)
+  status          SubmissionStatus    @default(WAITING)
   verdictString   String              @default("----") // e.g., "PPPP", "PP-PTPPP"
   score           Int                 @default(0)      // 0 - 100
   executionTimeMs Int?                // Max execution time across cases

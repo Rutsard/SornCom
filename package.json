@@ -13,7 +13,8 @@
     "prisma:push:core": "prisma db push --schema=prisma/core.prisma",
     "prisma:push:judge": "prisma db push --schema=prisma/judge.prisma",
     "prisma:push": "npm run prisma:push:core && npm run prisma:push:judge",
-    "db:seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "db:seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
+    "worker": "ts-node --compiler-options {\"module\":\"CommonJS\"} src/worker.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
