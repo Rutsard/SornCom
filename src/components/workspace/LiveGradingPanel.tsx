@@ -161,11 +161,25 @@ export function LiveGradingPanel({
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold border ${
                     isFullScore
                       ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                      : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                      : submission.score > 0
+                      ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                      : "bg-rose-500/20 text-rose-400 border-rose-500/30"
                   }`}
                 >
-                  {isFullScore ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-                  <span>{isFullScore ? "ACCEPTED (FULL SCORE)" : "PARTIAL SCORE"}</span>
+                  {isFullScore ? (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  ) : submission.score > 0 ? (
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                  ) : (
+                    <XCircle className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {isFullScore
+                      ? "ACCEPTED (FULL SCORE)"
+                      : submission.score > 0
+                      ? "PARTIAL SCORE"
+                      : "FAILED / REJECTED"}
+                  </span>
                 </span>
               )}
 
@@ -344,8 +358,15 @@ export function LiveGradingPanel({
                       </span>
                     </td>
                     <td className="py-2 px-3 text-zinc-300">
-                      <span>{c.verdictLabel}</span>
-                      {c.isSample && <span className="ml-2 text-[10px] text-zinc-500 font-sans">(Sample)</span>}
+                      <div>
+                        <span>{c.verdictLabel}</span>
+                        {c.isSample && <span className="ml-2 text-[10px] text-zinc-500 font-sans">(Sample)</span>}
+                      </div>
+                      {c.stderr && (
+                        <div className="mt-1 text-[10px] text-rose-300 bg-rose-950/40 p-1.5 rounded border border-rose-900/50 font-mono whitespace-pre-wrap max-w-md">
+                          {c.stderr}
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 px-3 text-right text-zinc-400">{c.executionTimeMs} ms</td>
                     <td className="py-2 px-3 text-right text-zinc-400">

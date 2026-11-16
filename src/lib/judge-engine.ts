@@ -5,6 +5,9 @@
 // ==============================================================================
 
 import { spawn } from "child_process";
+import fs from "fs";
+import path from "path";
+import os from "os";
 import {
   getTaskById,
   updateSubmissionStatus,
@@ -13,6 +16,39 @@ import {
   StoredSubmission,
 } from "./db-judge";
 import { GradingJob, publishVerdictUpdate, localJudgeBus, dequeueGradingJob } from "./redis";
+
+/**
+ * Resolves the real Python 3 binary on the system (avoids broken WindowsApps stubs on Windows)
+ */
+export function resolvePythonBinary(): string {
+  if (process.env.PYTHON_PATH && fs.existsSync(process.env.PYTHON_PATH)) {
+    return process.env.PYTHON_PATH;
+  }
+
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA || "";
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+
+    const candidates = [
+      localAppData ? path.join(localAppData, "Programs", "Python", "Python313", "python.exe") : "",
+      localAppData ? path.join(localAppData, "Programs", "Python", "Python312", "python.exe") : "",
+      localAppData ? path.join(localAppData, "Programs", "Python", "Python311", "python.exe") : "",
+      localAppData ? path.join(localAppData, "Programs", "Python", "Python310", "python.exe") : "",
+      path.join(programFiles, "Python313", "python.exe"),
+      path.join(programFiles, "Python312", "python.exe"),
+      path.join(programFiles, "Python311", "python.exe"),
+      path.join(programFiles, "Inkscape", "bin", "python.exe"),
+    ];
+
+    for (const p of candidates) {
+      if (p && fs.existsSync(p)) {
+        return p;
+      }
+    }
+  }
+
+  return process.platform === "win32" ? "python" : "python3";
+}
 
 /**
  * Normalizes output strings for fair grading comparison
@@ -41,9 +77,33 @@ export async function runPythonIsolated(
     let stderr = "";
     let timedOut = false;
 
-    // Use system python or python3
-    const pythonCmd = process.platform === "win32" ? "python" : "python3";
-    const child = spawn(pythonCmd, ["-c", code], {
+    const pythonCmd = resolvePythonBinary();
+    const tempFile = path.join(
+      os.tmpdir(),
+      `judge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.py`
+    );
+
+    const cleanup = () => {
+      try {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+      } catch {}
+    };
+
+    try {
+      fs.writeFileSync(tempFile, code, "utf-8");
+    } catch (err) {
+      return resolve({
+        stdout: "",
+        stderr: (err as Error).message,
+        timeMs: 0,
+        exitCode: -1,
+        timedOut: false,
+      });
+    }
+
+    const child = spawn(pythonCmd, [tempFile], {
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -66,6 +126,7 @@ export async function runPythonIsolated(
     child.on("error", (err) => {
       stderr += err.message;
       clearTimeout(timer);
+      cleanup();
       resolve({
         stdout: "",
         stderr: err.message,
@@ -77,6 +138,7 @@ export async function runPythonIsolated(
 
     child.on("close", (code) => {
       clearTimeout(timer);
+      cleanup();
       const elapsed = Math.round(performance.now() - startTime);
       resolve({
         stdout,
