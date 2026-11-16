@@ -4,7 +4,8 @@
 // ==============================================================================
 
 import { NextResponse } from "next/server";
-import { gradeSubmission } from "@/lib/judge-engine";
+import { processGradingJob } from "@/lib/judge-engine";
+import { createInitialSubmission } from "@/lib/db-judge";
 import { checkRateLimit } from "@/lib/redis";
 
 export async function POST(request: Request) {
@@ -35,7 +36,19 @@ export async function POST(request: Request) {
     }
 
     // Run Auto-Grader
-    const verdictResult = await gradeSubmission(taskId, code, userId);
+    const initialSubmission = await createInitialSubmission({
+      taskId,
+      sourceCode: code,
+      userId,
+    });
+
+    const verdictResult = await processGradingJob({
+      submissionId: initialSubmission.id,
+      taskId,
+      sourceCode: code,
+      userId,
+      enqueuedAt: initialSubmission.submittedAt,
+    });
 
     return NextResponse.json({
       success: true,

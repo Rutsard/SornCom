@@ -7,11 +7,11 @@
 
 import React, { useEffect } from "react";
 import confetti from "canvas-confetti";
-import { CheckCircle2, XCircle, Clock, AlertTriangle, Layers, Award } from "lucide-react";
-import { SubmissionResult } from "@/lib/judge-engine";
+import { CheckCircle2, Clock, AlertTriangle, Layers, Award } from "lucide-react";
+import { StoredSubmission, CaseVerdictItem } from "@/lib/db-judge";
 
 interface VerdictDisplayProps {
-  verdict: SubmissionResult | null;
+  verdict: StoredSubmission | null;
   isLoading: boolean;
 }
 
@@ -47,6 +47,8 @@ export function VerdictDisplay({ verdict, isLoading }: VerdictDisplayProps) {
   }
 
   const isFullScore = verdict.score === 100;
+  const passedCasesCount = verdict.caseVerdicts.filter((c: CaseVerdictItem) => c.passed).length;
+  const totalCasesCount = verdict.caseVerdicts.length;
 
   return (
     <div className="space-y-4">
@@ -72,7 +74,7 @@ export function VerdictDisplay({ verdict, isLoading }: VerdictDisplayProps) {
             </span>
           </div>
           <div className="text-xs font-mono text-zinc-400">
-            Passed {verdict.passedCases} of {verdict.totalCases} test cases
+            Passed {passedCasesCount} of {totalCasesCount} test cases
           </div>
         </div>
 
@@ -99,14 +101,14 @@ export function VerdictDisplay({ verdict, isLoading }: VerdictDisplayProps) {
           <Clock className="w-4 h-4 text-sky-400" />
           <div>
             <span className="text-zinc-500">Max Time: </span>
-            <span className="text-zinc-200 font-semibold">{verdict.maxExecutionTimeMs} ms</span>
+            <span className="text-zinc-200 font-semibold">{verdict.executionTimeMs} ms</span>
           </div>
         </div>
         <div className="bg-zinc-900/80 p-2.5 rounded border border-zinc-800 flex items-center space-x-2">
           <Layers className="w-4 h-4 text-purple-400" />
           <div>
             <span className="text-zinc-500">Peak Memory: </span>
-            <span className="text-zinc-200 font-semibold">{(verdict.maxMemoryUsedKb / 1024).toFixed(1)} MB</span>
+            <span className="text-zinc-200 font-semibold">{(verdict.memoryUsedKb / 1024).toFixed(1)} MB</span>
           </div>
         </div>
         <div className="bg-zinc-900/80 p-2.5 rounded border border-zinc-800 flex items-center space-x-2 col-span-2 sm:col-span-1">
@@ -114,7 +116,7 @@ export function VerdictDisplay({ verdict, isLoading }: VerdictDisplayProps) {
           <div>
             <span className="text-zinc-500">Status: </span>
             <span className="text-zinc-200 font-semibold">
-              {verdict.passedCases === verdict.totalCases ? "100% Passed" : `${verdict.passedCases}/${verdict.totalCases}`}
+              {passedCasesCount === totalCasesCount ? "100% Passed" : `${passedCasesCount}/${totalCasesCount}`}
             </span>
           </div>
         </div>
@@ -141,7 +143,7 @@ export function VerdictDisplay({ verdict, isLoading }: VerdictDisplayProps) {
         </div>
 
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-          {verdict.cases.map((c) => {
+          {verdict.caseVerdicts.map((c: CaseVerdictItem) => {
             let badgeBg = "bg-rose-500/20 text-rose-400 border-rose-500/40";
             if (c.verdictChar === "P") {
               badgeBg = "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 font-bold";

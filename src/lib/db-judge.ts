@@ -123,7 +123,7 @@ export async function getTaskById(taskId: string): Promise<TaskSeed | null> {
         id: task.id,
         title: task.title,
         slug: task.slug,
-        trackId: task.trackId as "POSN-Camp-1" | "Eng-ComProg",
+        trackId: task.trackId as "POSN-Camp-1" | "Eng-ComProg" | "TOI-Zero",
         difficulty: task.difficulty as "EASY" | "MEDIUM" | "HARD",
         timeLimitMs: task.timeLimitMs,
         memoryLimitMb: task.memoryLimitMb,
@@ -141,6 +141,10 @@ export async function getTaskById(taskId: string): Promise<TaskSeed | null> {
         tracingQuestion: task.tracingQuestion || undefined,
         tracingExpectedOutput: task.tracingExpectedOutput || undefined,
         tracingExplanation: task.tracingExplanation || undefined,
+        // TOI-Zero specific fields
+        category: (task as any).category || undefined,
+        pdfUrl: (task as any).pdfUrl || undefined,
+        sampleCases: (task as any).sampleCases || undefined,
         testCases: task.testCases.map((tc) => ({
           input: tc.input,
           expectedOutput: tc.expectedOutput,

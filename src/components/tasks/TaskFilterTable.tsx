@@ -96,6 +96,20 @@ export function TaskFilterTable({ initialTasks }: TaskFilterTableProps) {
             {initialTasks.filter((t) => t.trackId === "Eng-ComProg").length}
           </span>
         </button>
+
+        <button
+          onClick={() => setSelectedTrack("TOI-Zero")}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 transition-all ${
+            selectedTrack === "TOI-Zero"
+              ? "bg-rose-600 text-white shadow-lg shadow-rose-600/25 border border-rose-400"
+              : "bg-zinc-900 text-rose-400 hover:bg-rose-950/40 border border-rose-900/50"
+          }`}
+        >
+          <span>TOI-Zero (A1 / A2 / A3)</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-black/30 font-mono">
+            {initialTasks.filter((t) => t.trackId === "TOI-Zero").length}
+          </span>
+        </button>
       </div>
 
       {/* Filter & Search Bar */}
@@ -160,6 +174,7 @@ export function TaskFilterTable({ initialTasks }: TaskFilterTableProps) {
             <tbody className="divide-y divide-zinc-800/60 font-sans">
               {filteredTasks.map((task) => {
                 const isPosn = task.trackId === "POSN-Camp-1";
+                const isTOIZero = task.trackId === "TOI-Zero";
 
                 return (
                   <tr
@@ -192,6 +207,11 @@ export function TaskFilterTable({ initialTasks }: TaskFilterTableProps) {
                               มีโหมดสอบข้อเขียน
                             </span>
                           )}
+                          {isTOIZero && task.category && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-full">
+                              {task.category}
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex flex-wrap gap-1">
@@ -211,12 +231,14 @@ export function TaskFilterTable({ initialTasks }: TaskFilterTableProps) {
                     <td className="py-4 px-4">
                       <span
                         className={`text-xs px-2.5 py-1 rounded-full font-medium inline-block border ${
-                          isPosn
+                          isTOIZero
+                            ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                            : isPosn
                             ? "bg-sky-500/10 text-sky-400 border-sky-500/30"
                             : "bg-orange-500/10 text-orange-400 border-orange-500/30"
                         }`}
                       >
-                        {isPosn ? "POSN Camp 1" : "Eng ComProg"}
+                        {isTOIZero ? "TOI-Zero" : isPosn ? "POSN Camp 1" : "Eng ComProg"}
                       </span>
                     </td>
 

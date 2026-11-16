@@ -36,10 +36,10 @@ enum CaseVerdict {
 }
 
 model Task {
-  id                   String       @id // e.g. "0001", "ENG01"
+  id                   String       @id // e.g. "0001", "ENG01", "TOI0-A1-001"
   title                String
   slug                 String       @unique
-  trackId              String       // "POSN-Camp-1" | "Eng-ComProg"
+  trackId              String       // "POSN-Camp-1" | "Eng-ComProg" | "TOI-Zero"
   difficulty           Difficulty   @default(EASY)
   timeLimitMs          Int          @default(1000) // 1.0 second
   memoryLimitMb        Int          @default(64)   // 64 MB
@@ -53,6 +53,11 @@ model Task {
   sampleOutput         String       @db.Text
   constraints          String       @db.Text
   hints                String?      @db.Text
+
+  // TOI-Zero specific fields
+  category             String?      // "A1", "A2", "A3" for TOI-Zero problems
+  pdfUrl               String?      // Path to served PDF, e.g. "/pdfs/TOI-Zero/A1/A1-001.pdf"
+  sampleCases          Json?        // Array of { input, output } for multiple sample cases
 
   // Code Tracing Mode for POSN Paper Exam
   hasTracingQuiz       Boolean      @default(false)
@@ -69,6 +74,7 @@ model Task {
 
   @@index([trackId])
   @@index([difficulty])
+  @@index([category])
   @@map("tasks")
 }
 

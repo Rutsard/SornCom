@@ -28,14 +28,15 @@ export default async function TasksPage({
           คลังโจทย์และระบบตรวจอัตโนมัติ (Task Archive)
         </h1>
         <p className="text-sm text-zinc-400 max-w-3xl">
-          ฝึกเขียนโปรแกรมและแก้ปัญหาอัลกอริทึมสำหรับ 2 สายการเรียนรู้หลัก:{" "}
-          <strong className="text-sky-400 font-semibold">สอวน. คอมพิวเตอร์ ค่าย 1</strong> (เน้น I/O, Discrete Math, และการไล่โค้ดข้อเขียน) และ{" "}
-          <strong className="text-orange-400 font-semibold">Engineering ComProg</strong> (เน้นการประมวลผลข้อมูลเซนเซอร์, อาร์เรย์, และ NumPy)
+          ฝึกเขียนโปรแกรมและแก้ปัญหาอัลกอริทึมสำหรับ 3 สายการเรียนรู้หลัก:{" "}
+          <strong className="text-sky-400 font-semibold">สอวน. คอมพิวเตอร์ ค่าย 1</strong> (เน้น I/O, Discrete Math, และการไล่โค้ดข้อเขียน),{" "}
+          <strong className="text-orange-400 font-semibold">Engineering ComProg</strong> (เน้นการประมวลผลข้อมูลเซนเซอร์, อาร์เรย์, และ NumPy) และ{" "}
+          <strong className="text-rose-400 font-semibold">TOI-Zero</strong> (โจทย์ฝึกทักษะ A1/A2/A3 จากโครงการ TOI National Grader)
         </p>
       </div>
 
       {/* Track Stats Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Total Tasks */}
         <div className="bg-zinc-900/60 p-5 rounded-xl border border-zinc-800 space-y-2">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
@@ -68,6 +69,18 @@ export default async function TasksPage({
             {fullTasks.filter((t) => t.trackId === "Eng-ComProg").length}
           </div>
           <div className="text-[11px] text-zinc-400">NumPy & Sensor Array Analysis</div>
+        </div>
+
+        {/* TOI-Zero Track */}
+        <div className="bg-rose-950/20 p-5 rounded-xl border border-rose-800/40 space-y-2">
+          <div className="flex items-center justify-between text-rose-400 text-xs font-medium">
+            <span>TOI-Zero</span>
+            <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+          </div>
+          <div className="text-3xl font-black text-rose-300 font-mono">
+            {fullTasks.filter((t) => t.trackId === "TOI-Zero").length}
+          </div>
+          <div className="text-[11px] text-zinc-400">A1 (Easy) / A2 (Medium) / A3 (Hard)</div>
         </div>
       </div>
 

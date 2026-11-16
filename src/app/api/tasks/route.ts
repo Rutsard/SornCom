@@ -13,14 +13,14 @@ export async function GET(request: Request) {
     const difficulty = searchParams.get("difficulty") || undefined;
     const tag = searchParams.get("tag") || undefined;
 
-    let tasks = await getTasksList(track);
+    let tasks: any[] = await getTasksList(track);
 
     if (difficulty) {
       tasks = tasks.filter((t) => t.difficulty === difficulty);
     }
 
     if (tag) {
-      tasks = tasks.filter((t) => t.tags.some((tg) => tg.toLowerCase() === tag.toLowerCase()));
+      tasks = tasks.filter((t) => t.tags.some((tg: string) => tg.toLowerCase() === tag.toLowerCase()));
     }
 
     return NextResponse.json({

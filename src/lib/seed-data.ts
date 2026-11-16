@@ -6,7 +6,7 @@ export interface TaskSeed {
   id: string;
   title: string;
   slug: string;
-  trackId: "POSN-Camp-1" | "Eng-ComProg";
+  trackId: "POSN-Camp-1" | "Eng-ComProg" | "TOI-Zero";
   difficulty: "EASY" | "MEDIUM" | "HARD";
   timeLimitMs: number;
   memoryLimitMb: number;
@@ -24,6 +24,10 @@ export interface TaskSeed {
   tracingQuestion?: string;
   tracingExpectedOutput?: string;
   tracingExplanation?: string;
+  // TOI-Zero specific fields
+  category?: string;       // "A1", "A2", "A3"
+  pdfUrl?: string;         // Path to served PDF
+  sampleCases?: { input: string; output: string }[];
   testCases: {
     input: string;
     expectedOutput: string;

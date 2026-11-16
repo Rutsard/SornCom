@@ -10,6 +10,7 @@ import { Play, Send, RotateCcw, Terminal, CheckCircle, Zap, Code2, AlertTriangle
 import { usePyodide, PyodideRunResult } from "@/lib/usePyodide";
 import { LiveGradingPanel } from "./LiveGradingPanel";
 import { TaskSeed } from "@/lib/seed-data";
+import { StoredSubmission } from "@/lib/db-judge";
 
 interface EditorPaneProps {
   task: TaskSeed;
@@ -30,6 +31,7 @@ export function EditorPane({ task, externalInput }: EditorPaneProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [verdict, setVerdict] = useState<StoredSubmission | null>(null);
 
   // When external input is updated (e.g. from sample case click)
   useEffect(() => {
@@ -63,6 +65,7 @@ export function EditorPane({ task, externalInput }: EditorPaneProps) {
     setIsSubmitting(true);
     setActiveTab("verdict");
     setSubmitError(null);
+    setVerdict(null);
 
     try {
       const res = await fetch("/api/submissions", {
@@ -200,7 +203,15 @@ export function EditorPane({ task, externalInput }: EditorPaneProps) {
               <CheckCircle className="w-3.5 h-3.5" />
               <span>Judge Verdict</span>
               {verdict && (
-                <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 text-emerald-400">
+                <span
+                  className={`font-mono text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 ${
+                    verdict.score === 100
+                      ? "text-emerald-400"
+                      : verdict.score > 0
+                      ? "text-amber-400"
+                      : "text-rose-400"
+                  }`}
+                >
                   {verdict.score}/100
                 </span>
               )}
@@ -258,7 +269,11 @@ export function EditorPane({ task, externalInput }: EditorPaneProps) {
                 <span>{submitError}</span>
               </div>
             )}
-            <LiveGradingPanel submissionId={activeSubmissionId} />
+            <LiveGradingPanel
+              submissionId={activeSubmissionId}
+              initialData={verdict}
+              onGradingComplete={(sub) => setVerdict(sub)}
+            />
           </div>
         )}
       </div>

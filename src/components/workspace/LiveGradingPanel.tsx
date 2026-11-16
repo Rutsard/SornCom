@@ -38,6 +38,17 @@ export function LiveGradingPanel({
 }: LiveGradingPanelProps) {
   const [submission, setSubmission] = useState<StoredSubmission | null>(initialData || null);
   const [isPolling, setIsPolling] = useState(false);
+  const onGradingCompleteRef = React.useRef(onGradingComplete);
+
+  useEffect(() => {
+    onGradingCompleteRef.current = onGradingComplete;
+  }, [onGradingComplete]);
+
+  useEffect(() => {
+    if (initialData) {
+      setSubmission(initialData);
+    }
+  }, [initialData]);
 
   useEffect(() => {
     if (!submissionId) {
@@ -62,8 +73,8 @@ export function LiveGradingPanel({
             timeoutId = setTimeout(poll, 400);
           } else {
             setIsPolling(false);
-            if (onGradingComplete) {
-              onGradingComplete(sub);
+            if (onGradingCompleteRef.current) {
+              onGradingCompleteRef.current(sub);
             }
             if (sub.score === 100) {
               confetti({
@@ -89,18 +100,26 @@ export function LiveGradingPanel({
       isMounted = false;
       clearTimeout(timeoutId);
     };
-  }, [submissionId, onGradingComplete]);
+  }, [submissionId]);
 
-  if (!submissionId && !submission) {
+  if (!submission) {
+    if (!submissionId) {
+      return (
+        <div className="p-8 text-center text-zinc-500 text-sm">
+          No submission made yet. Click &quot;Submit to Judge&quot; to test your code against official test cases.
+        </div>
+      );
+    }
     return (
-      <div className="p-8 text-center text-zinc-500 text-sm">
-        No submission made yet. Click &quot;Submit to Judge&quot; to test your code against official test cases.
+      <div className="p-8 text-center text-zinc-500 text-sm flex flex-col items-center justify-center space-y-2">
+        <Loader2 className="w-5 h-5 animate-spin text-sky-400" />
+        <span>Submitting and initializing grader...</span>
       </div>
     );
   }
 
-  const status = submission?.status || "WAITING";
-  const isFullScore = submission?.score === 100;
+  const status = submission.status;
+  const isFullScore = submission.score === 100;
   const isCompleted = status === "COMPLETED";
 
   return (
