@@ -4,7 +4,7 @@
 // Generates programming.in.th verdicts: P, -, T, X, M (e.g., [PPPP-P], [PPTTT])
 // ==============================================================================
 
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -17,37 +17,85 @@ import {
 } from "./db-judge";
 import { GradingJob, publishVerdictUpdate, localJudgeBus, dequeueGradingJob } from "./redis";
 
+let cachedPythonCmd: string | null = null;
+
 /**
- * Resolves the real Python 3 binary on the system (avoids broken WindowsApps stubs on Windows)
+ * Resolves the real Python 3 binary on the system across Windows, Linux, and macOS
  */
 export function resolvePythonBinary(): string {
-  if (process.env.PYTHON_PATH && fs.existsSync(process.env.PYTHON_PATH)) {
-    return process.env.PYTHON_PATH;
+  if (cachedPythonCmd) {
+    return cachedPythonCmd;
   }
 
-  if (process.platform === "win32") {
-    const localAppData = process.env.LOCALAPPDATA || "";
+  if (process.env.PYTHON_PATH && fs.existsSync(process.env.PYTHON_PATH)) {
+    cachedPythonCmd = process.env.PYTHON_PATH;
+    return cachedPythonCmd;
+  }
+
+  const isWin = process.platform === "win32";
+
+  // 1. Direct candidates on Windows
+  if (isWin) {
+    const localAppData = process.env.LOCALAPPDATA || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, "AppData", "Local") : "C:\\Users\\ice55\\AppData\\Local");
     const programFiles = process.env.ProgramFiles || "C:\\Program Files";
 
-    const candidates = [
-      localAppData ? path.join(localAppData, "Programs", "Python", "Python313", "python.exe") : "",
-      localAppData ? path.join(localAppData, "Programs", "Python", "Python312", "python.exe") : "",
-      localAppData ? path.join(localAppData, "Programs", "Python", "Python311", "python.exe") : "",
-      localAppData ? path.join(localAppData, "Programs", "Python", "Python310", "python.exe") : "",
+    const winCandidates = [
+      path.join(localAppData, "Programs", "Python", "Python313", "python.exe"),
+      "C:\\Users\\ice55\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+      path.join(localAppData, "Programs", "Python", "Python312", "python.exe"),
+      path.join(localAppData, "Programs", "Python", "Python311", "python.exe"),
+      path.join(localAppData, "Programs", "Python", "Python310", "python.exe"),
       path.join(programFiles, "Python313", "python.exe"),
       path.join(programFiles, "Python312", "python.exe"),
-      path.join(programFiles, "Python311", "python.exe"),
       path.join(programFiles, "Inkscape", "bin", "python.exe"),
+      "c:\\program files\\Inkscape\\bin\\python.exe",
     ];
 
-    for (const p of candidates) {
-      if (p && fs.existsSync(p)) {
+    for (const p of winCandidates) {
+      if (fs.existsSync(p)) {
+        cachedPythonCmd = p;
         return p;
       }
     }
   }
 
-  return process.platform === "win32" ? "python" : "python3";
+  // 2. Direct candidates on Unix / Linux / macOS
+  const unixCandidates = [
+    "/usr/bin/python3",
+    "/usr/local/bin/python3",
+    "/usr/bin/python",
+    "/usr/local/bin/python",
+    "/opt/homebrew/bin/python3",
+    "/opt/homebrew/bin/python",
+    "/bin/python3",
+    "/bin/python",
+  ];
+
+  for (const p of unixCandidates) {
+    if (fs.existsSync(p)) {
+      cachedPythonCmd = p;
+      return p;
+    }
+  }
+
+  // 3. Probe with which / where
+  try {
+    const probe = isWin ? ["where python", "where py"] : ["which python3", "which python"];
+    for (const cmd of probe) {
+      try {
+        const out = execSync(cmd, { stdio: ["pipe", "pipe", "ignore"], encoding: "utf-8" }).trim();
+        const first = out.split(/\r?\n/)[0].trim();
+        if (first && fs.existsSync(first) && !first.toLowerCase().includes("windowsapps")) {
+          cachedPythonCmd = first;
+          return first;
+        }
+      } catch {}
+    }
+  } catch {}
+
+  // 4. Default fallback
+  cachedPythonCmd = isWin ? "python" : "python3";
+  return cachedPythonCmd;
 }
 
 /**
@@ -77,7 +125,7 @@ export async function runPythonIsolated(
     let stderr = "";
     let timedOut = false;
 
-    const pythonCmd = resolvePythonBinary();
+    const initialCmd = resolvePythonBinary();
     const tempFile = path.join(
       os.tmpdir(),
       `judge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.py`
@@ -103,58 +151,74 @@ export async function runPythonIsolated(
       });
     }
 
-    const child = spawn(pythonCmd, [tempFile], {
-      windowsHide: true,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const executeWithBinary = (binCmd: string, allowFallback: boolean) => {
+      const child = spawn(binCmd, [tempFile], {
+        windowsHide: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
 
-    const timer = setTimeout(() => {
-      timedOut = true;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        try {
+          child.kill("SIGKILL");
+        } catch {}
+      }, timeLimitMs + 300);
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      child.on("error", (err: NodeJS.ErrnoException) => {
+        clearTimeout(timer);
+
+        // If 'python3' gave ENOENT on Linux, try fallback to 'python' before giving up
+        if (err.code === "ENOENT" && allowFallback && (binCmd === "python3" || binCmd.endsWith("/python3"))) {
+          executeWithBinary("python", false);
+          return;
+        }
+
+        cleanup();
+        let errMsg = err.message;
+        if (err.code === "ENOENT") {
+          const platform = process.platform;
+          errMsg = `Python 3 executable ('${binCmd}') not found in ${platform} environment. Please install python3 (e.g. 'sudo apt install python3' or 'apk add python3') or configure PYTHON_PATH in .env.`;
+        }
+
+        resolve({
+          stdout: "",
+          stderr: errMsg,
+          timeMs: Math.round(performance.now() - startTime),
+          exitCode: -1,
+          timedOut: false,
+        });
+      });
+
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        cleanup();
+        const elapsed = Math.round(performance.now() - startTime);
+        resolve({
+          stdout,
+          stderr,
+          timeMs: elapsed,
+          exitCode: code,
+          timedOut,
+        });
+      });
+
       try {
-        child.kill("SIGKILL");
-      } catch {}
-    }, timeLimitMs + 300);
+        child.stdin.write(input);
+        child.stdin.end();
+      } catch {
+        // Stream error handled by child.on('error')
+      }
+    };
 
-    child.stdout.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    child.on("error", (err) => {
-      stderr += err.message;
-      clearTimeout(timer);
-      cleanup();
-      resolve({
-        stdout: "",
-        stderr: err.message,
-        timeMs: Math.round(performance.now() - startTime),
-        exitCode: -1,
-        timedOut: false,
-      });
-    });
-
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      cleanup();
-      const elapsed = Math.round(performance.now() - startTime);
-      resolve({
-        stdout,
-        stderr,
-        timeMs: elapsed,
-        exitCode: code,
-        timedOut,
-      });
-    });
-
-    try {
-      child.stdin.write(input);
-      child.stdin.end();
-    } catch {
-      // Stream error handled by child.on('error')
-    }
+    executeWithBinary(initialCmd, true);
   });
 }
 
